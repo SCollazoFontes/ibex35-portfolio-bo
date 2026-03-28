@@ -15,20 +15,18 @@ from evaluation import rendimiento_año_siguiente, sharpe_año_siguiente
 
 def betas(rendimientos_activos, rendimientos_mercado):
     """Calcula la beta de cada activo con respecto al mercado."""
-    rendimientos_activos  = rendimientos_activos.loc[rendimientos_mercado.index]
-    rendimientos_mercado  = rendimientos_mercado.loc[rendimientos_activos.index]
+    rendimientos_activos = rendimientos_activos.loc[rendimientos_mercado.index]
+    rendimientos_mercado = rendimientos_mercado.loc[rendimientos_activos.index]
 
     betas_dict = {}
     for ticker in rendimientos_activos.columns:
         r_activo  = rendimientos_activos[ticker].values
         r_mercado = rendimientos_mercado.values.squeeze()
-
         mask = ~np.isnan(r_activo) & ~np.isnan(r_mercado)
         if mask.sum() == 0:
             betas_dict[ticker] = np.nan
             continue
-
-        cov        = np.cov(r_activo[mask], r_mercado[mask])[0, 1]
+        cov         = np.cov(r_activo[mask], r_mercado[mask])[0, 1]
         var_mercado = np.var(r_mercado[mask])
         betas_dict[ticker] = cov / var_mercado if var_mercado > 0 else np.nan
 
@@ -43,40 +41,42 @@ def betas_periodo(año_inicio, años_atras, componentes_actualizados, precios_co
     )
     min_obs = int(MIN_OBS_RATIO * len(rendimientos_activos))
     rendimientos_activos_relevantes = rendimientos_activos.dropna(axis=1, thresh=min_obs)
-
     mask_ultima_fecha = rendimientos_activos_relevantes.iloc[-1].notna()
     rendimientos_activos_relevantes = rendimientos_activos_relevantes.loc[:, mask_ultima_fecha]
-
     rendimientos_mercado = filtrar_rendimientos_ibex(año_inicio, años_atras, rendimientos_ibex)
-
     return betas(rendimientos_activos_relevantes, rendimientos_mercado)
 
 
 def rendimiento_esperado_capm(betas_filtradas, año_inicio, años_atras, rendimientos_ibex, risk_free_alineado):
     """Calcula el rendimiento esperado de cada activo usando el CAPM."""
-    rendimientos_mercado = filtrar_rendimientos_ibex(año_inicio, años_atras, rendimientos_ibex)
-    rf_filtrado          = filtrar_risk_free(año_inicio, años_atras, risk_free_alineado)
-    risk_free_real       = rf_filtrado.mean().iloc[0]
-
+    rendimientos_mercado         = filtrar_rendimientos_ibex(año_inicio, años_atras, rendimientos_ibex)
+    rf_filtrado                  = filtrar_risk_free(año_inicio, años_atras, risk_free_alineado)
+    risk_free_real               = rf_filtrado.mean().iloc[0]
     rendimiento_esperado_mercado = rendimientos_mercado.mean() * 252
 
     rendimientos_esperados = {
         ticker: risk_free_real + beta * (rendimiento_esperado_mercado - risk_free_real).iloc[0]
         for ticker, beta in betas_filtradas.items()
     }
-
     return pd.DataFrame(rendimientos_esperados).T
 
 
 def modelo_capm(rendimientos_diarios, año_inicio, años_atras, risk_free_real,
                 componentes_actualizados, precios_componentes, rendimientos_componentes,
-                rendimientos_ibex, risk_free_alineado):
+                rendimientos_ibex, risk_free_alineado, params=None):
     """Obtiene los pesos óptimos de una cartera mediante el CAPM."""
+    p = params or {}
+    peso_min      = p.get("PESO_MIN",      PESO_MIN)
+    peso_max      = p.get("PESO_MAX",      PESO_MAX)
+    peso_total    = p.get("PESO_TOTAL",    PESO_TOTAL)
+    peso_conc_max = p.get("PESO_CONC_MAX", PESO_CONC_MAX)
+    umbral        = p.get("UMBRAL",        UMBRAL)
+
     try:
         if rendimientos_diarios.empty:
             raise ValueError("El DataFrame de rendimientos diarios está vacío.")
 
-        betas_filtradas    = betas_periodo(
+        betas_filtradas      = betas_periodo(
             año_inicio, años_atras, componentes_actualizados,
             precios_componentes, rendimientos_componentes, rendimientos_ibex
         )
@@ -86,13 +86,11 @@ def modelo_capm(rendimientos_diarios, año_inicio, años_atras, risk_free_real,
         matriz_covarianzas = rendimientos_diarios.cov() * 252
         num_activos        = len(rendimiento_esperado)
 
-        limites = tuple((PESO_MIN, PESO_MAX) for _ in range(num_activos))
-
+        limites = tuple((peso_min, peso_max) for _ in range(num_activos))
         restricciones = [
-            {"type": "eq",   "fun": lambda pesos: np.sum(pesos) - PESO_TOTAL},
-            {"type": "ineq", "fun": lambda pesos: PESO_CONC_MAX - np.sum(pesos[pesos > UMBRAL])},
+            {"type": "eq",   "fun": lambda pesos: np.sum(pesos) - peso_total},
+            {"type": "ineq", "fun": lambda pesos: peso_conc_max - np.sum(pesos[pesos > umbral])},
         ]
-
         pesos_iniciales = np.ones(num_activos) / num_activos
 
         resultado = minimize(
@@ -109,14 +107,13 @@ def modelo_capm(rendimientos_diarios, año_inicio, años_atras, risk_free_real,
             "Ticker": rendimientos_diarios.columns,
             "Pesos":  np.round(pesos_optimos, 4),
         })
-
         return pesos_tickers, sharpe_ratio_opt, rendimiento_ex_ante
 
     except Exception as e:
         raise RuntimeError(f"Error al optimizar la cartera (CAPM): {e}")
 
 
-def CAPM(año_inicio, años_atras, año_final, data):
+def CAPM(año_inicio, años_atras, año_final, data, params=None):
     """Backtest del modelo CAPM año a año vs IBEX 35."""
     componentes_actualizados = data["componentes_actualizados"]
     precios_componentes      = data["precios_componentes"]
@@ -125,8 +122,8 @@ def CAPM(año_inicio, años_atras, año_final, data):
     rendimientos_ibex        = data["rendimientos_ibex"]
     indice                   = data["indice"]
 
-    capm_resultados         = {}
-    resultados              = []
+    capm_resultados             = {}
+    resultados                  = []
     rendimiento_cartera_ex_ante = []
 
     for año in range(año_inicio, año_final):
@@ -143,25 +140,23 @@ def CAPM(año_inicio, años_atras, año_final, data):
             pesos_optimos, sharpe_ratio_opt, rendimiento_ex_ante = modelo_capm(
                 rendimientos_diarios_relevantes, año, años_atras, risk_free_real,
                 componentes_actualizados, precios_componentes, rendimientos_componentes,
-                rendimientos_ibex, risk_free_alineado,
+                rendimientos_ibex, risk_free_alineado, params
             )
 
-            rendimiento_cartera = rendimiento_año_siguiente(año, pesos_optimos, precios_componentes)
+            rendimiento_cartera  = rendimiento_año_siguiente(año, pesos_optimos, precios_componentes)
             rendimiento_ibex_val = rendimientos_anuales_ibex(indice, [año + 1])
             sharpe_ex_post       = sharpe_año_siguiente(año, pesos_optimos, precios_componentes, risk_free_alineado)
 
             resultados.append({
-                "Año":                      año + 1,
+                "Año":                       año + 1,
                 "Rendimiento de la Cartera": rendimiento_cartera,
-                "Rendimiento del IBEX 35":  rendimiento_ibex_val.get(año + 1, None),
+                "Rendimiento del IBEX 35":   rendimiento_ibex_val.get(año + 1, None),
             })
-
             capm_resultados[año] = {
-                "Pesos":               pesos_optimos,
+                "Pesos":                pesos_optimos,
                 "Sharpe Ratio Ex Ante": sharpe_ratio_opt,
                 "Sharpe Ratio Ex Post": sharpe_ex_post,
             }
-
             rendimiento_cartera_ex_ante.append({"Año": año + 1, "Rendimiento Ex Ante": rendimiento_ex_ante})
 
         except Exception as e:

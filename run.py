@@ -1,4 +1,11 @@
+import sys
+import os
 import pandas as pd
+from datetime import datetime
+from pathlib import Path
+
+# Asegura que el directorio raíz del proyecto esté en sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import AÑO_INICIO, AÑO_FINAL, AÑOS_ATRAS, CAMBIOS_TICKERS, PATH_EXCEL
 from data   import load_excel, prepare_data
@@ -11,7 +18,26 @@ from evaluation     import rendimiento_año_siguiente
 from utils          import extraer_sharpe
 
 
-def comparativa_modelos(año_inicio, años_atras, año_final, data):
+# ---------------------------------------------------------------------------
+# Definición de escenarios (parámetros de restricción de pesos)
+# ---------------------------------------------------------------------------
+ESCENARIOS = {
+    "1_sin_restricciones": {
+        "PESO_MIN": 0.0, "PESO_MAX": 1.0,
+        "PESO_TOTAL": 1.0, "PESO_CONC_MAX": 1.0, "UMBRAL": 1.0,
+    },
+    "2_ucits_10pct": {
+        "PESO_MIN": 0.0, "PESO_MAX": 0.1,
+        "PESO_TOTAL": 1.0, "PESO_CONC_MAX": 0.4, "UMBRAL": 0.05,
+    },
+    "3_ric_25pct": {
+        "PESO_MIN": 0.0, "PESO_MAX": 0.25,
+        "PESO_TOTAL": 1.0, "PESO_CONC_MAX": 0.5, "UMBRAL": 0.05,
+    },
+}
+
+
+def comparativa_modelos(año_inicio, años_atras, año_final, data, params=None):
     """
     Ejecuta los 4 modelos (MMV, CAPM, VE, OB) año a año y compara sus resultados.
     Devuelve: df_ex_ante, df_ex_post, df_comparativa, df_rendimientos, pesos, df_evolucion
@@ -22,39 +48,35 @@ def comparativa_modelos(año_inicio, años_atras, año_final, data):
     rendimientos_list  = []
     pesos              = {}
 
-    indice = data["indice"]
+    indice              = data["indice"]
     precios_componentes = data["precios_componentes"]
 
     for año in range(año_inicio, año_final):
         año_siguiente = año + 1
         try:
-            resultados_MMV,  detalles_MMV,  ex_ante_MMV          = MMV(año,  años_atras, año_siguiente, data)
-            resultados_CAPM, detalles_CAPM, ex_ante_CAPM         = CAPM(año, años_atras, año_siguiente, data)
-            resultados_VE,   detalles_VE,   ex_ante_VE           = VE(año,   años_atras, año_siguiente, data)
-            resultados_OB,   detalles_OB,   ex_ante_OB,  evol    = OB(año,   años_atras, año_siguiente, data)
+            resultados_MMV,  detalles_MMV,  ex_ante_MMV         = MMV(año,  años_atras, año_siguiente, data, params)
+            resultados_CAPM, detalles_CAPM, ex_ante_CAPM        = CAPM(año, años_atras, año_siguiente, data, params)
+            resultados_VE,   detalles_VE,   ex_ante_VE          = VE(año,   años_atras, año_siguiente, data, params)
+            resultados_OB,   detalles_OB,   ex_ante_OB,  _      = OB(año,   años_atras, año_siguiente, data, params)
 
-            rend_IBEX        = rendimientos_anuales_ibex(indice, [año_siguiente])
+            rend_IBEX         = rendimientos_anuales_ibex(indice, [año_siguiente])
             rentabilidad_IBEX = rend_IBEX.get(año_siguiente, None)
 
-            # Alfas
             alfa_MMV  = float(resultados_MMV.loc[0,  "Diferencia"].strip("%"))
             alfa_CAPM = float(resultados_CAPM.loc[0, "Diferencia"].strip("%"))
             alfa_ve   = float(resultados_VE.loc[0,   "Diferencia"].strip("%"))
             alfa_ob   = float(resultados_OB.loc[0,   "Diferencia"].strip("%"))
 
-            # Sharpes
             Sharpe_Ante_MMV,  Sharpe_Post_MMV  = extraer_sharpe(detalles_MMV).loc[año,  ["Sharpe Ratio Ex Ante", "Sharpe Ratio Ex Post"]]
             Sharpe_Ante_CAPM, Sharpe_Post_CAPM = extraer_sharpe(detalles_CAPM).loc[año, ["Sharpe Ratio Ex Ante", "Sharpe Ratio Ex Post"]]
             Sharpe_Ante_VE,   Sharpe_Post_VE   = extraer_sharpe(detalles_VE).loc[año,   ["Sharpe Ratio Ex Ante", "Sharpe Ratio Ex Post"]]
             Sharpe_Ante_OB,   Sharpe_Post_OB   = extraer_sharpe(detalles_OB).loc[año,   ["Sharpe Ratio Ex Ante", "Sharpe Ratio Ex Post"]]
 
-            # Rendimientos esperados
             Rend_EA_MMV  = ex_ante_MMV[0]["Rendimiento Ex Ante"]
             Rend_EA_CAPM = ex_ante_CAPM[0]["Rendimiento Ex Ante"]
             Rend_EA_VE   = ex_ante_VE[0]["Rendimiento Ex Ante"]
             Rend_EA_OB   = ex_ante_OB[0]["Rendimiento Ex Ante"]
 
-            # Rendimientos reales
             pesos_MMV  = detalles_MMV[año]["Pesos"]
             pesos_CAPM = detalles_CAPM[año]["Pesos"]
             pesos_VE   = detalles_VE[año]["Pesos"]
@@ -76,7 +98,6 @@ def comparativa_modelos(año_inicio, años_atras, año_final, data):
                 ("OB",   "Sharpe Ex Ante"):        Sharpe_Ante_OB,
                 "Año": año_siguiente,
             })
-
             resultados_ex_post.append({
                 ("MMV",  "Rendimiento Real"): f"{Rend_MMV  * 100:.4f}%",
                 ("MMV",  "Sharpe Ex Post"):   Sharpe_Post_MMV,
@@ -88,7 +109,6 @@ def comparativa_modelos(año_inicio, años_atras, año_final, data):
                 ("OB",   "Sharpe Ex Post"):   Sharpe_Post_OB,
                 "Año": año_siguiente,
             })
-
             resultados_dif.append({
                 ("MMV",  "Alfa"):     alfa_MMV,
                 ("MMV",  "Δ Sharpe"): round(Sharpe_Post_MMV  - Sharpe_Ante_MMV,  6),
@@ -100,7 +120,6 @@ def comparativa_modelos(año_inicio, años_atras, año_final, data):
                 ("OB",   "Δ Sharpe"): round(Sharpe_Post_OB   - Sharpe_Ante_OB,   6),
                 "Año": año_siguiente,
             })
-
             rendimientos_list.append({
                 "Año":                    año_siguiente,
                 "Media-Varianza":         Rend_MMV,
@@ -109,34 +128,24 @@ def comparativa_modelos(año_inicio, años_atras, año_final, data):
                 "Optimización Bayesiana": Rend_OB,
                 "IBEX 35": f"{rentabilidad_IBEX * 100:.4f}%" if rentabilidad_IBEX is not None else None,
             })
-
-            pesos[año_siguiente] = {
-                "MMV":  detalles_MMV,
-                "CAPM": detalles_CAPM,
-                "VE":   detalles_VE,
-                "OB":   detalles_OB,
-            }
+            pesos[año_siguiente] = {"MMV": detalles_MMV, "CAPM": detalles_CAPM, "VE": detalles_VE, "OB": detalles_OB}
 
         except Exception as e:
             print(f"Error en el año {año}: {e}")
 
-    # DataFrames de resultados
     df_ex_ante    = pd.DataFrame(resultados_ex_ante).set_index("Año")
     df_ex_post    = pd.DataFrame(resultados_ex_post).set_index("Año")
     df_comparativa = pd.DataFrame(resultados_dif).set_index("Año")
 
     for df in [df_ex_ante, df_ex_post, df_comparativa]:
-        df.columns = pd.MultiIndex.from_tuples(df.columns)
-        df.index.name = "Año"
+        df.columns     = pd.MultiIndex.from_tuples(df.columns)
+        df.index.name  = "Año"
 
-    # Rendimientos anuales formateados
     df_rendimientos = (
-        pd.DataFrame(rendimientos_list)
-        .set_index("Año")
+        pd.DataFrame(rendimientos_list).set_index("Año")
         .apply(lambda col: col.map(lambda x: f"{x * 100:.4f}%" if isinstance(x, (int, float)) else x))
     )
 
-    # Evolución del capital (base 100)
     df_clean     = pd.DataFrame(rendimientos_list).set_index("Año")
     df_evolucion = df_clean.apply(
         lambda col: col.map(lambda x: float(x) if isinstance(x, (int, float)) else float(x.strip("%")) / 100)
@@ -147,32 +156,60 @@ def comparativa_modelos(año_inicio, años_atras, año_final, data):
     df_evolucion = (1 + df_evolucion).cumprod() * 100
     df_evolucion = df_evolucion.round(2)
 
-    # Promedio de alfas
     promedio = df_comparativa.mean(numeric_only=True)
     promedio.name = "Promedio"
     df_comparativa = pd.concat([df_comparativa, promedio.to_frame().T])
-
     for modelo in ["MMV", "CAPM", "VE", "OB"]:
         df_comparativa[(modelo, "Alfa")] = df_comparativa[(modelo, "Alfa")].map(lambda x: f"{x:.2f}%")
 
     return df_ex_ante, df_ex_post, df_comparativa, df_rendimientos, pesos, df_evolucion
 
 
+def guardar_resultados(nombre_escenario, df_ex_ante, df_ex_post, df_comparativa, df_rendimientos, df_evolucion, carpeta):
+    """Guarda todos los DataFrames de un escenario como CSV."""
+    carpeta.mkdir(parents=True, exist_ok=True)
+    df_ex_ante.to_csv(carpeta    / f"{nombre_escenario}_ex_ante.csv")
+    df_ex_post.to_csv(carpeta    / f"{nombre_escenario}_ex_post.csv")
+    df_comparativa.to_csv(carpeta / f"{nombre_escenario}_comparativa.csv")
+    df_rendimientos.to_csv(carpeta / f"{nombre_escenario}_rendimientos.csv")
+    df_evolucion.to_csv(carpeta   / f"{nombre_escenario}_evolucion.csv")
+    print(f"  Guardado: {carpeta}/{nombre_escenario}_*.csv")
+
+
 def main():
-    """Carga los datos y ejecuta la comparativa de los 3 escenarios del TFG."""
+    """Carga los datos, ejecuta los 3 escenarios y guarda todos los resultados en CSV."""
     if not PATH_EXCEL.exists():
         print(f"Error: no se encuentra el archivo de datos: {PATH_EXCEL}")
         return
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    carpeta   = Path(__file__).resolve().parent / "results" / timestamp
+
+    print("Cargando datos...")
     raw  = load_excel(PATH_EXCEL)
     data = prepare_data(raw, CAMBIOS_TICKERS)
+    print(f"Datos cargados. Backtest {AÑO_INICIO}-{AÑO_FINAL}, lookback {AÑOS_ATRAS} años.\n")
 
-    print("Ejecutando Escenario 1: Sin restricciones...")
-    Ex_ante_1, Ex_post_1, Diferencias_1, Rendimientos_1, Pesos_1, Evolucion_1 = comparativa_modelos(
-        AÑO_INICIO, AÑOS_ATRAS, AÑO_FINAL, data
-    )
-    print(Ex_ante_1)
-    print(Ex_post_1)
+    for nombre, params in ESCENARIOS.items():
+        print(f"{'='*60}")
+        print(f"Escenario {nombre}  |  PESO_MAX={params['PESO_MAX']}  UMBRAL={params['UMBRAL']}")
+        print(f"{'='*60}")
+
+        df_ex_ante, df_ex_post, df_comparativa, df_rendimientos, _, df_evolucion = comparativa_modelos(
+            AÑO_INICIO, AÑOS_ATRAS, AÑO_FINAL, data, params
+        )
+
+        print("\n--- Ex Ante ---")
+        print(df_ex_ante.to_string())
+        print("\n--- Ex Post ---")
+        print(df_ex_post.to_string())
+        print("\n--- Comparativa (Alfa y Δ Sharpe) ---")
+        print(df_comparativa.to_string())
+
+        guardar_resultados(nombre, df_ex_ante, df_ex_post, df_comparativa, df_rendimientos, df_evolucion, carpeta)
+        print()
+
+    print(f"\nResultados guardados en: {carpeta}")
 
 
 if __name__ == "__main__":

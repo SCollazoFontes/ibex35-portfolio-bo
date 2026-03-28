@@ -8,8 +8,15 @@ from data.returns import rendimientos_diarios_filtrados, filtrar_risk_free, rend
 from evaluation import rendimiento_año_siguiente, sharpe_año_siguiente
 
 
-def modelo_media_varianza(rendimientos_diarios, risk_free_real):
+def modelo_media_varianza(rendimientos_diarios, risk_free_real, params=None):
     """Obtiene los pesos óptimos de una cartera mediante el modelo de Media-Varianza de Markowitz."""
+    p = params or {}
+    peso_min      = p.get("PESO_MIN",      PESO_MIN)
+    peso_max      = p.get("PESO_MAX",      PESO_MAX)
+    peso_total    = p.get("PESO_TOTAL",    PESO_TOTAL)
+    peso_conc_max = p.get("PESO_CONC_MAX", PESO_CONC_MAX)
+    umbral        = p.get("UMBRAL",        UMBRAL)
+
     try:
         if rendimientos_diarios.empty:
             raise ValueError("El DataFrame de rendimientos diarios está vacío.")
@@ -18,11 +25,11 @@ def modelo_media_varianza(rendimientos_diarios, risk_free_real):
         matriz_covarianzas    = rendimientos_diarios.cov() * 252
         num_activos           = len(promedio_rendimientos)
 
-        limites = tuple((PESO_MIN, PESO_MAX) for _ in range(num_activos))
+        limites = tuple((peso_min, peso_max) for _ in range(num_activos))
 
         restricciones = [
-            {"type": "eq",   "fun": lambda pesos: np.sum(pesos) - PESO_TOTAL},
-            {"type": "ineq", "fun": lambda pesos: PESO_CONC_MAX - np.sum(pesos[pesos > UMBRAL])},
+            {"type": "eq",   "fun": lambda pesos: np.sum(pesos) - peso_total},
+            {"type": "ineq", "fun": lambda pesos: peso_conc_max - np.sum(pesos[pesos > umbral])},
         ]
 
         pesos_iniciales = np.ones(num_activos) / num_activos
@@ -33,8 +40,8 @@ def modelo_media_varianza(rendimientos_diarios, risk_free_real):
             method="SLSQP", bounds=limites, constraints=restricciones,
         )
 
-        pesos_optimos    = resultado.x
-        sharpe_ratio_opt = -resultado.fun
+        pesos_optimos       = resultado.x
+        sharpe_ratio_opt    = -resultado.fun
         rendimiento_ex_ante = np.dot(pesos_optimos, promedio_rendimientos.values).item()
 
         pesos_tickers = pd.DataFrame({
@@ -48,7 +55,7 @@ def modelo_media_varianza(rendimientos_diarios, risk_free_real):
         raise RuntimeError(f"Error al optimizar la cartera (MMV): {e}")
 
 
-def MMV(año_inicio, años_atras, año_final, data):
+def MMV(año_inicio, años_atras, año_final, data, params=None):
     """Backtest del modelo Media-Varianza año a año vs IBEX 35."""
     componentes_actualizados  = data["componentes_actualizados"]
     precios_componentes       = data["precios_componentes"]
@@ -56,8 +63,8 @@ def MMV(año_inicio, años_atras, año_final, data):
     risk_free_alineado        = data["risk_free_alineado"]
     indice                    = data["indice"]
 
-    resultados             = []
-    markowitz              = {}
+    resultados                  = []
+    markowitz                   = {}
     rendimiento_cartera_ex_ante = []
 
     for año in range(año_inicio, año_final):
@@ -72,25 +79,23 @@ def MMV(año_inicio, años_atras, año_final, data):
             risk_free_real = rf_filtrado.mean().iloc[0]
 
             pesos_optimos, sharpe_ratio_opt, rendimiento_ex_ante = modelo_media_varianza(
-                rendimientos_diarios_relevantes, risk_free_real
+                rendimientos_diarios_relevantes, risk_free_real, params
             )
 
-            rendimiento_cartera = rendimiento_año_siguiente(año, pesos_optimos, precios_componentes)
-            rendimiento_ibex    = rendimientos_anuales_ibex(indice, [año + 1])
-            sharpe_ex_post      = sharpe_año_siguiente(año, pesos_optimos, precios_componentes, risk_free_alineado)
+            rendimiento_cartera  = rendimiento_año_siguiente(año, pesos_optimos, precios_componentes)
+            rendimiento_ibex     = rendimientos_anuales_ibex(indice, [año + 1])
+            sharpe_ex_post       = sharpe_año_siguiente(año, pesos_optimos, precios_componentes, risk_free_alineado)
 
             resultados.append({
-                "Año":                      año + 1,
+                "Año":                       año + 1,
                 "Rendimiento de la Cartera": rendimiento_cartera,
-                "Rendimiento del IBEX 35":  rendimiento_ibex.get(año + 1, None),
+                "Rendimiento del IBEX 35":   rendimiento_ibex.get(año + 1, None),
             })
-
             markowitz[año] = {
-                "Pesos":               pesos_optimos,
+                "Pesos":                pesos_optimos,
                 "Sharpe Ratio Ex Ante": sharpe_ratio_opt,
                 "Sharpe Ratio Ex Post": sharpe_ex_post,
             }
-
             rendimiento_cartera_ex_ante.append({"Año": año + 1, "Rendimiento Ex Ante": rendimiento_ex_ante})
 
         except Exception as e:

@@ -16,7 +16,6 @@ def calcular_metricas_historicas_VE(rendimiento_ibex):
 
     varianza_diaria = rendimiento_ibex ** 2
     theta           = varianza_diaria.mean()
-
     varianza_lag    = varianza_diaria.shift(1).dropna()
     delta_varianza  = varianza_diaria.diff().dropna()
 
@@ -47,20 +46,19 @@ def volatilidades_heston(parametros, rendimientos_componentes):
     kappa, theta, sigma = parametros["kappa"], parametros["theta"], parametros["sigma"]
     tickers = rendimientos_componentes.columns
     fechas  = rendimientos_componentes.index
-    N       = len(fechas)
-    dt      = 1 / 252
+    N, dt   = len(fechas), 1 / 252
 
     v0 = rendimientos_componentes.var().values
     volatilidades_simuladas = pd.DataFrame(index=fechas, columns=tickers)
 
     for ticker in tickers:
-        v          = v0[tickers.get_loc(ticker)]
+        v             = v0[tickers.get_loc(ticker)]
         volatilidades = np.zeros(N)
         volatilidades[0] = v
         for t in range(1, N):
             dW = np.random.normal()
-            dv = kappa * (theta - volatilidades[t - 1]) * dt + sigma * np.sqrt(max(volatilidades[t - 1], 0)) * dW * np.sqrt(dt)
-            volatilidades[t] = max(volatilidades[t - 1] + dv, 0)
+            dv = kappa * (theta - volatilidades[t-1]) * dt + sigma * np.sqrt(max(volatilidades[t-1], 0)) * dW * np.sqrt(dt)
+            volatilidades[t] = max(volatilidades[t-1] + dv, 0)
         volatilidades_simuladas[ticker] = np.sqrt(volatilidades)
 
     return volatilidades_simuladas
@@ -68,19 +66,19 @@ def volatilidades_heston(parametros, rendimientos_componentes):
 
 def covarianza_dinamica(volatilidades_simuladas, correlaciones_historicas):
     """Calcula matrices de covarianza dinámicas basadas en las volatilidades simuladas."""
-    tickers           = volatilidades_simuladas.columns
+    tickers               = volatilidades_simuladas.columns
     covarianzas_dinamicas = {}
 
     for fecha in volatilidades_simuladas.index:
-        volat_actual   = volatilidades_simuladas.loc[fecha]
+        volat_actual    = volatilidades_simuladas.loc[fecha]
         activos_validos = volat_actual > 0
 
         if activos_validos.any():
-            volat_actual        = volat_actual[activos_validos].values
+            volat_actual          = volat_actual[activos_validos].values
             correlaciones_validas = correlaciones_historicas.values[np.ix_(activos_validos, activos_validos)]
-            diag_volat           = np.diag(np.sqrt(volat_actual))
-            covarianza           = diag_volat @ correlaciones_validas @ diag_volat
-            covarianza          *= 252
+            diag_volat            = np.diag(np.sqrt(volat_actual))
+            covarianza            = diag_volat @ correlaciones_validas @ diag_volat
+            covarianza           *= 252
         else:
             covarianza = np.zeros((len(tickers), len(tickers)))
 
@@ -94,40 +92,45 @@ def volatilidades_dinamicas(parametros, rendimientos):
     kappa, theta, sigma = parametros["kappa"], parametros["theta"], parametros["sigma"]
     tickers = rendimientos.columns
     fechas  = rendimientos.index
-    N       = len(fechas)
-    dt      = 1 / 252
+    N, dt   = len(fechas), 1 / 252
 
     v0 = rendimientos.var().values
     volatilidades_simuladas = pd.DataFrame(index=fechas, columns=tickers)
 
     for ticker in tickers:
-        v          = v0[tickers.get_loc(ticker)]
+        v             = v0[tickers.get_loc(ticker)]
         volatilidades = np.zeros(N)
         volatilidades[0] = v
         for t in range(1, N):
             dW = np.random.normal(0, np.sqrt(dt))
-            dv = kappa * (theta - volatilidades[t - 1]) * dt + sigma * np.sqrt(max(volatilidades[t - 1], 0)) * dW
-            volatilidades[t] = max(volatilidades[t - 1] + dv, 0)
+            dv = kappa * (theta - volatilidades[t-1]) * dt + sigma * np.sqrt(max(volatilidades[t-1], 0)) * dW
+            volatilidades[t] = max(volatilidades[t-1] + dv, 0)
         volatilidades_simuladas[ticker] = volatilidades
 
     return volatilidades_simuladas
 
 
-def modelo_VE(rendimientos_diarios_periodo, risk_free_real, covarianza):
+def modelo_VE(rendimientos_diarios_periodo, risk_free_real, covarianza, params=None):
     """Obtiene los pesos óptimos de una cartera mediante el modelo de Volatilidad Estocástica de Heston."""
+    p = params or {}
+    peso_min      = p.get("PESO_MIN",      PESO_MIN)
+    peso_max      = p.get("PESO_MAX",      PESO_MAX)
+    peso_total    = p.get("PESO_TOTAL",    PESO_TOTAL)
+    peso_conc_max = p.get("PESO_CONC_MAX", PESO_CONC_MAX)
+    umbral        = p.get("UMBRAL",        UMBRAL)
+
     try:
         if rendimientos_diarios_periodo.empty:
             raise ValueError("El DataFrame de rendimientos diarios está vacío.")
 
         promedio_rendimientos = rendimientos_diarios_periodo.mean() * 252
         num_activos           = len(promedio_rendimientos)
-
-        pesos_iniciales = np.ones(num_activos) / num_activos
-        limites         = tuple((PESO_MIN, PESO_MAX) for _ in range(num_activos))
+        pesos_iniciales       = np.ones(num_activos) / num_activos
+        limites               = tuple((peso_min, peso_max) for _ in range(num_activos))
 
         restricciones = [
-            {"type": "eq",   "fun": lambda pesos: np.sum(pesos) - PESO_TOTAL},
-            {"type": "ineq", "fun": lambda pesos: PESO_CONC_MAX - np.sum(pesos[pesos > UMBRAL])},
+            {"type": "eq",   "fun": lambda pesos: np.sum(pesos) - peso_total},
+            {"type": "ineq", "fun": lambda pesos: peso_conc_max - np.sum(pesos[pesos > umbral])},
         ]
 
         resultado = minimize(
@@ -144,24 +147,23 @@ def modelo_VE(rendimientos_diarios_periodo, risk_free_real, covarianza):
             "Ticker": rendimientos_diarios_periodo.columns,
             "Pesos":  np.round(pesos_optimos, 4),
         })
-
         return pesos_tickers, sharpe_ratio_opt, rendimiento_ex_ante
 
     except Exception as e:
         raise RuntimeError(f"Error al optimizar la cartera (VE): {e}")
 
 
-def VE(año_inicio, años_atras, año_final, data):
+def VE(año_inicio, años_atras, año_final, data, params=None):
     """Backtest del modelo de Volatilidad Estocástica (Heston) año a año vs IBEX 35."""
-    componentes_actualizados  = data["componentes_actualizados"]
-    precios_componentes       = data["precios_componentes"]
-    rendimientos_componentes  = data["rendimientos_componentes"]
-    risk_free_alineado        = data["risk_free_alineado"]
-    indice                    = data["indice"]
-    correlaciones_historicas  = data["correlaciones_historicas"]
+    componentes_actualizados = data["componentes_actualizados"]
+    precios_componentes      = data["precios_componentes"]
+    rendimientos_componentes = data["rendimientos_componentes"]
+    risk_free_alineado       = data["risk_free_alineado"]
+    indice                   = data["indice"]
+    correlaciones_historicas = data["correlaciones_historicas"]
 
-    ve_resultados           = {}
-    resultados              = []
+    ve_resultados               = {}
+    resultados                  = []
     rendimiento_cartera_ex_ante = []
 
     for año in range(año_inicio, año_final):
@@ -181,8 +183,7 @@ def VE(año_inicio, años_atras, año_final, data):
             for _ in range(VE_N_SIM):
                 vols_i   = volatilidades_dinamicas(parametros_historicos, rendimientos_diarios_relevantes)
                 cov_i    = covarianza_dinamica(vols_i, correlaciones_historicas)
-                mat_i    = list(cov_i.values())
-                cov_prom = np.mean(mat_i, axis=0)
+                cov_prom = np.mean(list(cov_i.values()), axis=0)
                 suma_cov = cov_prom if suma_cov is None else suma_cov + cov_prom
 
             covarianza_promedio = suma_cov / VE_N_SIM
@@ -191,7 +192,7 @@ def VE(año_inicio, años_atras, año_final, data):
             risk_free_real = rf_filtrado.mean().iloc[0]
 
             pesos_optimos, sharpe_ratio_opt, rendimiento_ex_ante = modelo_VE(
-                rendimientos_diarios_relevantes, risk_free_real, covarianza_promedio
+                rendimientos_diarios_relevantes, risk_free_real, covarianza_promedio, params
             )
 
             rendimiento_cartera  = rendimiento_año_siguiente(año, pesos_optimos, precios_componentes)
@@ -199,17 +200,15 @@ def VE(año_inicio, años_atras, año_final, data):
             sharpe_ex_post       = sharpe_año_siguiente(año, pesos_optimos, precios_componentes, risk_free_alineado)
 
             resultados.append({
-                "Año":                      año + 1,
+                "Año":                       año + 1,
                 "Rendimiento de la Cartera": rendimiento_cartera,
-                "Rendimiento del IBEX 35":  rendimiento_ibex_val.get(año + 1, None),
+                "Rendimiento del IBEX 35":   rendimiento_ibex_val.get(año + 1, None),
             })
-
             ve_resultados[año] = {
-                "Pesos":               pesos_optimos,
+                "Pesos":                pesos_optimos,
                 "Sharpe Ratio Ex Ante": sharpe_ratio_opt,
                 "Sharpe Ratio Ex Post": sharpe_ex_post,
             }
-
             rendimiento_cartera_ex_ante.append({"Año": año + 1, "Rendimiento Ex Ante": rendimiento_ex_ante})
 
         except Exception as e:
