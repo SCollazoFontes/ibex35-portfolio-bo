@@ -37,3 +37,14 @@ CACHE_DB_PATH = BASE_DIR / "data" / "cache.db"
 # sus estadísticas (media, varianza) son menos fiables. 80% es el mismo
 # criterio que usaba el TFG original (MIN_OBS_RATIO).
 MIN_OBS_RATIO = 0.80
+
+# ---------------------------------------------------------------------------
+# APIs externas
+# ---------------------------------------------------------------------------
+
+# Clave de acceso a la API de FRED (Federal Reserve Economic Data).
+# Necesaria para descargar la tasa libre de riesgo (get_risk_free_rate).
+# Cómo obtenerla gratis:
+#   1. https://fred.stlouisfed.org/docs/api/api_key.html
+#   2. Crea una cuenta → copia tu API key → pégala aquí.
+FRED_API_KEY = ""
