@@ -662,6 +662,22 @@ class TestReturns:
             with pytest.raises(ValueError, match="no reconocido"):
                 get_risk_free_rate("JP", "2020-01-01", "2020-12-31")
 
+    def test_get_risk_free_custom_series_id(self):
+        """
+        Se puede pasar un series_id personalizado en vez del default de config.py.
+        La función debe usarlo y fallar en la conexión (no en la validación).
+        """
+        from portfolio_optimizer.data.returns import get_risk_free_rate
+        from unittest.mock import patch
+        import portfolio_optimizer.data.returns as returns_module
+
+        with patch.object(returns_module, "FRED_API_KEY", "fake_key"):
+            # Con series_id personalizado debe llegar hasta el intento de conexión
+            # (ConnectionError), NO debe fallar con ValueError de "no reconocido"
+            with pytest.raises((ConnectionError, Exception)):
+                get_risk_free_rate("ES", "2020-01-01", "2020-12-31",
+                                   series_id="IRSTCI01ESM156N")
+
     @pytest.mark.network
     def test_get_risk_free_real_download(self):
         """

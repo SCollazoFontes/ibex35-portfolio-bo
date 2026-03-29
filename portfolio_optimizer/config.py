@@ -48,3 +48,20 @@ MIN_OBS_RATIO = 0.80
 #   1. https://fred.stlouisfed.org/docs/api/api_key.html
 #   2. Crea una cuenta → copia tu API key → pégala aquí.
 FRED_API_KEY = ""
+
+# Serie FRED a usar como tasa libre de riesgo por mercado.
+# Cambia el valor para elegir otra serie sin tocar el código.
+#
+# Opciones disponibles para ES:
+#   "EURIBOR3MD156N"   — Euribor 3M zona euro, DIARIO desde 1999  ← recomendado
+#   "IR3TIB01ESM156N"  — Tipo interbancario 3M España (OCDE), mensual desde 1994
+#   "IRSTCI01ESM156N"  — Tipo overnight España (OCDE), mensual desde 1994
+#
+# Opciones disponibles para US:
+#   "TB3MS"            — T-Bill 3 meses, mensual desde 1934       ← recomendado
+#   "DGS3MO"           — T-Bill 3 meses, DIARIO desde 1982
+#   "FEDFUNDS"         — Fed Funds Rate, mensual desde 1954
+RISK_FREE_SERIES = {
+    "ES": "EURIBOR3MD156N",
+    "US": "TB3MS",
+}

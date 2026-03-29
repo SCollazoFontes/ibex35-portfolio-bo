@@ -15,7 +15,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from portfolio_optimizer.config import MIN_OBS_RATIO, FRED_API_KEY
+from portfolio_optimizer.config import MIN_OBS_RATIO, FRED_API_KEY, RISK_FREE_SERIES
 
 logger = logging.getLogger(__name__)
 
@@ -132,53 +132,56 @@ def filter_by_coverage(
 # Tasa libre de riesgo
 # ---------------------------------------------------------------------------
 
-# Series de FRED por mercado.
-# Por qué estas series concretas:
-#   ES → "IRSTCI01ESM156N": tipo de interés a 3 meses del mercado monetario
-#        español. Frecuencia mensual, en % anual.
-#   US → "TB3MS": T-Bill a 3 meses del Tesoro americano. Frecuencia mensual,
-#        en % anual. Es la referencia estándar para el ratio de Sharpe en USD.
-_FRED_SERIES = {
-    "ES": "IRSTCI01ESM156N",
-    "US": "TB3MS",
-}
-
 _MARKET_NAMES = {
-    "ES": "España (bono soberano 3M)",
-    "US": "EE.UU. (T-Bill 3M)",
+    "ES": "España",
+    "US": "EE.UU.",
 }
 
 
-def get_risk_free_rate(market: str, start: str, end: str) -> pd.Series:
+def get_risk_free_rate(
+    market: str,
+    start: str,
+    end: str,
+    series_id: str | None = None,
+) -> pd.Series:
     """
     Descarga la tasa libre de riesgo diaria del mercado correspondiente.
 
     Flujo:
-        1. Descarga serie mensual de FRED (en % anual).
+        1. Descarga serie de FRED (en % anual).
         2. Convierte a decimal: divide entre 100.
         3. Convierte a tasa diaria: divide entre 252 (días hábiles por año).
         4. Reindexar a días hábiles con forward-fill.
-           Por qué forward-fill: los datos son mensuales pero necesitamos
-           un valor para cada día hábil. Usamos el último valor mensual
-           conocido hasta el siguiente, igual que hacía el TFG original.
+           Por qué forward-fill: las series mensuales necesitan un valor para
+           cada día hábil. Usamos el último valor publicado hasta el siguiente,
+           igual que hacía el TFG original.
 
     Args:
-        market: "ES" para España, "US" para EE.UU.
-        start:  fecha inicio "YYYY-MM-DD"
-        end:    fecha fin   "YYYY-MM-DD"
+        market:    "ES" para España, "US" para EE.UU.
+        start:     fecha inicio "YYYY-MM-DD"
+        end:       fecha fin   "YYYY-MM-DD"
+        series_id: serie FRED a usar. Si None, usa RISK_FREE_SERIES[market]
+                   definido en config.py. Puedes pasar cualquier serie válida
+                   de FRED, por ejemplo:
+                     "EURIBOR3MD156N"  — Euribor 3M diario (ES recomendado)
+                     "IR3TIB01ESM156N" — Interbancario 3M España mensual
+                     "IRSTCI01ESM156N" — Overnight España mensual
+                     "TB3MS"           — T-Bill 3M mensual (US recomendado)
+                     "DGS3MO"          — T-Bill 3M diario
+                     "FEDFUNDS"        — Fed Funds Rate mensual
 
     Returns:
         Serie con índice de días hábiles y tasa diaria en decimal.
-        Ejemplo: 0.04 anual → 0.04/252 ≈ 0.0001587 diario.
+        Ejemplo: 4.0% anual → 4.0/100/252 ≈ 0.0001587 diario.
 
     Raises:
-        ValueError:       Si market no está en ("ES", "US").
-        RuntimeError:     Si FRED_API_KEY está vacía (instrucciones de cómo obtenerla).
-        ConnectionError:  Si no hay conexión a internet o FRED no responde.
+        ValueError:      Si market no está en ("ES", "US").
+        RuntimeError:    Si FRED_API_KEY está vacía (con instrucciones).
+        ConnectionError: Si FRED no responde.
     """
-    if market not in _FRED_SERIES:
+    if market not in _MARKET_NAMES:
         raise ValueError(
-            f"Mercado '{market}' no reconocido. Disponibles: {list(_FRED_SERIES.keys())}"
+            f"Mercado '{market}' no reconocido. Disponibles: {list(_MARKET_NAMES.keys())}"
         )
 
     if not FRED_API_KEY:
@@ -190,7 +193,17 @@ def get_risk_free_rate(market: str, start: str, end: str) -> pd.Series:
             "  4. Añádela en portfolio_optimizer/config.py: FRED_API_KEY = 'tu_key'\n"
         )
 
-    series_id = _FRED_SERIES[market]
+    # Si no se especifica serie, usamos el default de config.py para ese mercado.
+    # Por qué no hardcodear aquí: el default puede cambiar en config.py sin
+    # tocar este módulo.
+    if series_id is None:
+        series_id = RISK_FREE_SERIES.get(market)
+        if series_id is None:
+            raise ValueError(
+                f"No hay serie FRED configurada para el mercado '{market}'. "
+                f"Añádela en config.py: RISK_FREE_SERIES['{market}'] = 'SERIE_ID'"
+            )
+
     market_name = _MARKET_NAMES[market]
 
     logger.info(
