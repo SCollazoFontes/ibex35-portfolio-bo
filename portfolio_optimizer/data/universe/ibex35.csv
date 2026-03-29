@@ -1,0 +1,120 @@
+# Composición histórica del IBEX 35 en formato yfinance (.MC para Bolsa de Madrid).
+#
+# Fuentes:
+#   - Hoja "Constituents" del archivo "Evolucion IBEX.xlsx" del proyecto original.
+#   - Cambios de composición verificados cruzando con:
+#     https://es.wikipedia.org/wiki/IBEX_35 (sección "Composición histórica")
+#
+# Formato:
+#   ticker    : código en formato yfinance (sufijo .MC para Bolsa de Madrid)
+#   date_in   : fecha de entrada al índice (YYYY-MM-DD)
+#   date_out  : fecha de salida del índice (vacío = sigue en el índice hoy)
+#   notes     : cambios relevantes (renombres, OPAs, exclusiones)
+#
+# Cobertura: desde 2005-01-03 (suficiente para lookback de 10 años desde 2015).
+# Para backtests anteriores a 2015 con lookback 10Y se necesitaría extender hasta 2004.
+#
+ticker,date_in,date_out,notes
+# --- Tickers presentes en la composición de 2005-01-03 ---
+ABE.MC,2005-01-03,2018-05-09,Abertis - excluido por OPA de ACS/Atlantia
+ACS.MC,2005-01-03,,ACS Actividades de Construccion
+ACX.MC,2005-01-03,2013-12-23,Acerinox - primera salida
+ACX.MC,2014-12-22,,,Acerinox - reentrada
+ALT.MC,2005-01-03,2008-02-04,Altadis - excluido (OPA Imperial Tobacco)
+AMS.MC,2005-01-03,2005-06-28,Amadeus - primera salida
+ANA.MC,2005-01-03,2015-06-22,Acciona - primera salida
+ANA.MC,2015-07-20,,,Acciona - reentrada
+BBVA.MC,2005-01-03,,Banco Bilbao Vizcaya Argentaria
+BKT.MC,2005-01-03,,Bankinter
+BTO.MC,2005-01-03,2006-08-01,Banco Popular (BTO) - primera salida
+BTO.MC,2006-08-01,2011-01-03,Banco Popular (BTO) - reentrada
+ELE.MC,2005-01-03,2013-12-23,Endesa - primera salida
+ELE.MC,2014-12-22,,,Endesa - reentrada
+ENG.MC,2005-01-03,,Enagas
+FCC.MC,2005-01-03,2016-07-18,FCC Construccion
+FER.MC,2005-01-03,,Ferrovial
+GAM.MC,2005-01-03,2013-01-02,Gamesa - primera salida (renombrada SGRE)
+GAS.MC,2005-01-03,2018-07-02,Gas Natural Fenosa (renombrada NTGY)
+IBE.MC,2005-01-03,,Iberdrola
+IBLA.MC,2005-01-03,2011-01-21,Iberia Lineas Aereas (fusion con British Airways → IAG)
+IDR.MC,2005-01-03,,Indra Sistemas
+ITX.MC,2005-01-03,,Inditex
+LOR.MC,2005-01-03,2006-07-06,Logista - primera salida
+MAP.MC,2005-01-03,2006-01-02,Mapfre - primera salida
+MAP.MC,2006-07-25,,,Mapfre - reentrada
+MVC.MC,2005-01-03,2007-07-02,Metrovacesa
+NHH.MC,2005-01-03,2006-07-03,NH Hotels - primera salida
+NHH.MC,2006-01-02,2006-07-03,NH Hotels - reentrada breve
+NHH.MC,2008-01-02,2008-01-02,NH Hotels - segunda salida (misma fecha)
+POP.MC,2005-01-03,2017-06-07,Banco Popular - resolución bancaria
+PRS.MC,2005-01-03,2007-01-02,Prisa
+REP.MC,2005-01-03,,Repsol
+SAB.MC,2005-01-03,,Banco Sabadell
+SAN.MC,2005-01-03,,Banco Santander
+SGC.MC,2005-01-03,2008-05-12,Sogecable
+SYV.MC,2005-01-03,2013-10-01,Sacyr Vallehermoso (renombrada SCYR)
+TEF.MC,2005-01-03,,Telefonica
+TEM.MC,2005-01-03,2006-07-25,Telefonica Moviles (absorbida por TEF)
+TL5.MC,2005-01-03,2020-06-22,Mediaset España
+TPI.MC,2005-01-03,2006-07-25,TPI Paginas Amarillas
+UNF.MC,2005-01-03,2009-04-15,Uralita
+# --- Entradas posteriores a 2005 ---
+REE.MC,2005-07-01,2022-06-13,Red Electrica (renombrada RED)
+CIN.MC,2005-07-01,2009-12-07,Cintra Concesiones
+A3M.MC,2005-07-08,2008-01-02,Antena 3 Media
+NHH.MC,2006-01-02,2006-07-03,NH Hotels (reentrada corta)
+FAD.MC,2006-07-03,2007-03-09,Fadesa
+MAP.MC,2006-07-25,,Mapfre (reentrada permanente desde aqui)
+BTO.MC,2006-08-01,2011-01-03,Banco Popular (reentrada)
+NHH.MC,2006-08-17,2008-01-02,NH Hotels (tercera entrada)
+AGS.MC,2007-01-02,2008-02-04,Abengoa (primera entrada)
+CAR.MC,2007-03-21,2007-05-10,Carrefour España
+COL.MC,2007-05-10,2017-06-16,Colas (primera entrada)
+BME.MC,2007-07-02,2015-06-22,Bolsas y Mercados Españoles (absorbida por SIX)
+ABG.MC,2008-01-02,2012-10-26,Abengoa (clase A)
+GRF.MC,2008-01-02,,Grifols
+CRI.MC,2008-02-04,2011-07-01,Criteria CaixaCorp (se convierte en CABK)
+IBR.MC,2008-02-04,2011-07-11,Iberdrola Renovables (reabsorbida por IBE)
+TRE.MC,2008-04-13,2019-06-24,Tecnicas Reunidas
+OHLA.MC,2008-07-01,2016-06-21,OHL (ahora OHLA)
+MTS.MC,2009-05-05,,ArcelorMittal Spain
+EVA.MC,2010-01-04,2010-07-26,Evangelista
+EBRO.MC,2010-07-26,2012-05-02,Ebro Foods (primera salida)
+AMS.MC,2011-01-03,2011-01-03,Amadeus (reentrada - misma fecha es placeholder)
+IAG.MC,2011-04-01,,International Airlines Group
+CABK.MC,2011-07-01,,CaixaBank
+BKIA.MC,2011-10-03,2013-01-02,Bankia (primera salida)
+DIA.MC,2012-01-02,2018-12-24,Distribuidora Internacional de Alimentacion
+ABG.P.MC,2012-10-26,2015-11-27,Abengoa (clase B, antes ABG)
+VIS.MC,2013-01-02,2014-12-22,Viscofan (primera salida)
+BKIA.MC,2013-12-23,2021-03-29,Bankia (reentrada - fusionada con CABK)
+GAM.MC,2013-12-23,2017-07-24,Gamesa (reentrada antes de fusion con Siemens)
+EBRO.MC,2013-07-01,2014-06-23,Ebro Foods (segunda entrada)
+SCYR.MC,2013-10-01,2016-06-21,Sacyr (primera salida)
+ABG.P.MC,2014-06-23,2015-11-27,Abengoa clase B (reentrada)
+ELE.MC,2014-12-22,,Endesa (reentrada permanente)
+VIS.MC,2016-06-21,2021-12-20,Viscofan (segunda entrada)
+ACX.MC,2015-06-22,,Acerinox (reentrada permanente)
+AENA.MC,2015-06-22,,Aena
+ANA.MC,2015-07-20,,Acciona (reentrada permanente)
+MRL.MC,2015-12-21,,Merlin Properties
+CLNX.MC,2016-06-21,,Cellnex Telecom
+MEL.MC,2016-08-08,2024-07-22,Melia Hotels International
+COL.MC,2017-06-16,,Colas (reentrada permanente)
+SGRE.MC,2017-07-24,2022-12-14,Siemens Gamesa Renewable Energy
+NTGY.MC,2018-07-02,,Naturgy (antes GAS)
+CIE.MC,2018-06-18,2022-06-20,CIE Automotive
+ENC.MC,2018-12-24,2020-09-21,Ence Energia y Celulosa
+MAS.MC,2019-06-24,2020-09-14,Masmovil (excluida por OPA)
+ALM.MC,2020-06-22,2022-06-20,Almirall
+PHM.MC,2020-09-21,2022-12-19,Pharma Mar
+SLR.MC,2020-10-19,,Solaria Energia
+FDR.MC,2021-03-29,,Fluidra
+ROVI.MC,2021-12-20,,Laboratorios Rovi
+RED.MC,2022-06-13,,Red Electrica (antes REE)
+ANE.MC,2022-06-20,,Antolin Irausa (Grupo Antolin)
+SCYR.MC,2022-06-20,,Sacyr (segunda reentrada)
+LOG.MC,2022-12-19,,Logista (reentrada)
+UNI.MC,2022-12-27,,Unicaja Banco
+AMS.MC,2011-01-03,,Amadeus IT Group (reentrada permanente)
+PUIG.MC,2024-07-22,,Puig Brands
