@@ -58,7 +58,7 @@ def rendimiento_esperado_capm(betas_filtradas, año_inicio, años_atras, rendimi
         ticker: risk_free_real + beta * (rendimiento_esperado_mercado - risk_free_real).iloc[0]
         for ticker, beta in betas_filtradas.items()
     }
-    return pd.DataFrame(rendimientos_esperados).T
+    return pd.Series(rendimientos_esperados)
 
 
 def modelo_capm(rendimientos_diarios, año_inicio, años_atras, risk_free_real,
@@ -83,8 +83,13 @@ def modelo_capm(rendimientos_diarios, año_inicio, años_atras, risk_free_real,
         rendimiento_esperado = rendimiento_esperado_capm(
             betas_filtradas, año_inicio, años_atras, rendimientos_ibex, risk_free_alineado
         )
-        matriz_covarianzas = rendimientos_diarios.cov() * 252
-        num_activos        = len(rendimiento_esperado)
+        # Alinear rendimientos_diarios con los tickers que tienen betas calculadas
+        tickers_capm       = rendimiento_esperado.index.intersection(rendimientos_diarios.columns)
+        rendimientos_capm  = rendimientos_diarios[tickers_capm]
+        rend_esp_alineado  = rendimiento_esperado[tickers_capm]
+
+        matriz_covarianzas = rendimientos_capm.cov() * 252
+        num_activos        = len(tickers_capm)
 
         limites = tuple((peso_min, peso_max) for _ in range(num_activos))
         restricciones = [
@@ -95,16 +100,16 @@ def modelo_capm(rendimientos_diarios, año_inicio, años_atras, risk_free_real,
 
         resultado = minimize(
             sharpe_ratio, pesos_iniciales,
-            args=(rendimiento_esperado, matriz_covarianzas, risk_free_real),
+            args=(rend_esp_alineado, matriz_covarianzas, risk_free_real),
             method="SLSQP", bounds=limites, constraints=restricciones,
         )
 
         pesos_optimos       = resultado.x
         sharpe_ratio_opt    = -resultado.fun
-        rendimiento_ex_ante = np.dot(pesos_optimos, rendimiento_esperado.values).item()
+        rendimiento_ex_ante = np.dot(pesos_optimos, rend_esp_alineado.values).item()
 
         pesos_tickers = pd.DataFrame({
-            "Ticker": rendimientos_diarios.columns,
+            "Ticker": tickers_capm,
             "Pesos":  np.round(pesos_optimos, 4),
         })
         return pesos_tickers, sharpe_ratio_opt, rendimiento_ex_ante
